@@ -16,6 +16,7 @@ export interface FormSection {
 }
 
 export interface Form {
+  theme: { primaryColor: string; backgroundColor: string; textColor: string; accentColor: string }
   id: string
   title: string
   description: string
@@ -42,4 +43,11 @@ export interface User {
   email: string
   displayName: string
   photoURL?: string
+}
+
+export interface FormTheme {
+  primaryColor: string // e.g., #673ab7
+  backgroundColor: string // e.g., #f4f4f4
+  textColor: string // e.g., #202124
+  accentColor: string // e.g., #1a73e8
 }

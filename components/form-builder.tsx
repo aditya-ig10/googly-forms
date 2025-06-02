@@ -40,6 +40,12 @@ export function FormBuilder({ initialForm }: FormBuilderProps) {
     isTest: initialForm?.isTest || false,
     userId: user?.uid || "",
     userEmail: user?.email || "",
+    theme: initialForm?.theme || {
+      primaryColor: "#6B46C1",
+      backgroundColor: "#FFFFFF",
+      textColor: "#1F2937",
+      accentColor: "#9333EA"
+    }
   })
   const [saving, setSaving] = useState(false)
   const [selectedInput, setSelectedInput] = useState<{ id: string; selection: { start: number; end: number } } | null>(null)

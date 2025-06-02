@@ -136,10 +136,10 @@ export function FormsDashboard() {
       {/* Hero Section */}
       <div className="text-center space-y-6 py-10">
         <div className="space-y-4">
-          <h1 className="text-5xl lg:text-6xl font-extrabold bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent tracking-tight">
+          <h1 className="text-3xl lg:text-6xl font-extrabold bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent tracking-tight">
             My Forms
           </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed font-medium">
+          <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed font-medium">
             Create, manage, and analyze your forms with powerful insights. Build engaging surveys, quizzes, and
             feedback forms effortlessly.
           </p>
