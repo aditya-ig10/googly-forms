@@ -65,14 +65,14 @@ export function Login() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden animate-fade-in">
       {/* Animated background elements */}
       <div className="absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl animate-pulse delay-500"></div>
+        <div className="absolute top-1/4 left-1/4 w-72 h-72 sm:w-96 sm:h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-72 h-72 sm:w-96 sm:h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-72 h-72 sm:w-96 sm:h-96 bg-indigo-500/5 rounded-full blur-3xl animate-pulse delay-500"></div>
       </div>
 
-      <div className="relative z-10 min-h-screen flex">
+      <div className="relative z-10 min-h-screen flex flex-col lg:flex-row">
         {/* Left side - Hero content */}
-        <div className="flex-1 flex items-center justify-center p-8 lg:p-16">
+        <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-16">
           <div className="max-w-lg space-y-8 text-white animate-pop-in">
             <div className="space-y-4">
               <div className="flex items-center gap-3 mb-6">
@@ -84,23 +84,22 @@ export function Login() {
                 </span>
               </div>
 
-              <h1 className="text-5xl lg:text-6xl font-bold leading-tight">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
                 Create
                 <span className="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                  {" "}
-                  Beautiful{" "}
+                  {" "}Beautiful{" "}
                 </span>
                 Forms
               </h1>
 
-              <p className="text-xl text-gray-300 leading-relaxed">
+              <p className="text-lg sm:text-xl text-gray-300 leading-relaxed">
                 Build stunning surveys, quizzes, and feedback forms in minutes. Collect responses, analyze data, and
                 make informed decisions.
               </p>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {stats.map((stat, index) => (
                 <div
                   key={index}
@@ -119,7 +118,7 @@ export function Login() {
             </div>
 
             {/* Features grid */}
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {features.map((feature, index) => (
                 <div
                   key={index}
@@ -135,9 +134,8 @@ export function Login() {
         </div>
 
         {/* Right side - Login form */}
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="w-full max-w-md space-y-8 animate-pop-in" style={{ animationDelay: "200ms" }}>
-            {/* Login Card */}
+        <div className="flex-1 flex items-center justify-center p-6 sm:p-8">
+          <div className="w-full max-w-sm sm:max-w-md space-y-8 animate-pop-in" style={{ animationDelay: "200ms" }}>
             <Card className="shadow-2xl border-0 bg-white/95 backdrop-blur-xl hover-lift">
               <CardHeader className="text-center pb-6">
                 <div className="mx-auto h-16 w-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg hover-glow">

@@ -1,15 +1,16 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef } from "react"
 import type { Form, FormQuestion, FormSection } from "@/types/form"
 import { QuestionEditor } from "./question-editor"
+import { TextFormattingPopup } from "./text-formatting-popup"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Upload, Save, Eye, Copy, Layout } from "lucide-react"
+import { Plus, Upload, Save, Eye, Copy, Layout, Type, Text, CheckSquare, SquareCheck, List, Mail, Hash, LucideIcon } from "lucide-react"
 import { createForm, updateForm } from "@/lib/firestore"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -41,57 +42,81 @@ export function FormBuilder({ initialForm }: FormBuilderProps) {
     userEmail: user?.email || "",
   })
   const [saving, setSaving] = useState(false)
-  const [katexToggles, setKatexToggles] = useState({
-    formTitle: false,
-    formDescription: false,
-    sections: form.sections.map(() => ({ title: false, description: false })),
-  })
+  const [selectedInput, setSelectedInput] = useState<{ id: string; selection: { start: number; end: number } } | null>(null)
   const mathPreviews = useRef<Map<string, HTMLDivElement>>(new Map())
   const { toast } = useToast()
   const router = useRouter()
 
-  // Update toggles when sections change
-  useEffect(() => {
-    setKatexToggles((prev) => ({
-      ...prev,
-      sections: form.sections.map((_, i) =>
-        prev.sections[i] || { title: false, description: false }
-      ),
-    }))
-  }, [form.sections.length])
+  const questionTypes: { type: FormQuestion["type"]; label: string; icon: LucideIcon }[] = [
+    { type: "text", label: "Short Answer", icon: Type },
+    { type: "textarea", label: "Paragraph", icon: Text },
+    { type: "multiple-choice", label: "Multiple Choice", icon: CheckSquare },
+    { type: "checkbox", label: "Checkboxes", icon: SquareCheck },
+    { type: "dropdown", label: "Dropdown", icon: List },
+    { type: "email", label: "Email", icon: Mail },
+    { type: "number", label: "Number", icon: Hash },
+  ]
 
-  // Function to render math expressions or plain text
-  const renderMath = (text: string, elementId: string, useKatex: boolean) => {
+  const renderMath = (text: string, elementId: string) => {
     const element = mathPreviews.current.get(elementId)
     if (element) {
-      if (useKatex) {
+      const katexRegex = /\\\(.*?\\\)/g
+      let lastIndex = 0
+      let html = ""
+      let match
+
+      while ((match = katexRegex.exec(text)) !== null) {
+        const plainText = text.slice(lastIndex, match.index)
+        const mathText = match[0].slice(2, -2)
+        html += plainText.replace(/</g, "&lt;").replace(/>/g, "&gt;")
         try {
-          katex.render(text, element, {
+          const mathHtml = katex.renderToString(mathText, {
             throwOnError: false,
             displayMode: false,
           })
-        } catch (error) {
-          element.innerHTML = `<span class="text-red-500 text-sm">Invalid math expression</span>`
+          html += mathHtml
+        } catch {
+          html += `<span class="text-red-500">[Invalid math]</span>`
         }
-      } else {
-        element.innerText = text || ""
+        lastIndex = match.index + match[0].length
       }
+      html += text.slice(lastIndex).replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      html = html.replace(/<b>(.*?)<\/b>/g, '<strong>$1</strong>')
+        .replace(/<i>(.*?)<\/i>/g, '<em>$1</em>')
+        .replace(/<u>(.*?)<\/u>/g, '<u>$1</u>')
+      element.innerHTML = html
     }
   }
 
-  // Render previews for form title, description, and sections
-  useEffect(() => {
-    renderMath(form.title, "form-title-preview", katexToggles.formTitle)
-    renderMath(form.description, "form-description-preview", katexToggles.formDescription)
-    form.sections.forEach((section, index) => {
-      renderMath(section.title, `section-title-${index}`, katexToggles.sections[index]?.title || false)
-      renderMath(
-        section.description || "",
-        `section-description-${index}`,
-        katexToggles.sections[index]?.description || false
-      )
-    })
-  }, [form.title, form.description, form.sections, katexToggles])
+  const handleInputSelection = (e: React.SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>, id: string) => {
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement
+    const start = target.selectionStart ?? 0
+    const end = target.selectionEnd ?? 0
+    if (start !== end) {
+      setSelectedInput({ id, selection: { start, end } })
+    } else {
+      setSelectedInput(null)
+    }
+  }
+
+  const applyFormatting = (id: string, type: "katex" | "bold" | "italic" | "underline", value: string) => {
+    if (!selectedInput || selectedInput.id !== id) return value
+    const { start, end } = selectedInput.selection
+    const selectedText = value.slice(start, end)
+    let newText = value
+    if (type === "katex") {
+      newText = `${value.slice(0, start)}\\(${selectedText}\\)${value.slice(end)}`
+    } else {
+      const tags = {
+        bold: ["<b>", "</b>"],
+        italic: ["<i>", "</i>"],
+        underline: ["<u>", "</u>"],
+      }[type]
+      newText = `${value.slice(0, start)}${tags[0]}${selectedText}${tags[1]}${value.slice(end)}`
+    }
+    setSelectedInput(null)
+    return newText
+  }
 
   const addSection = () => {
     const newSection: FormSection = {
@@ -115,10 +140,10 @@ export function FormBuilder({ initialForm }: FormBuilderProps) {
     }))
   }
 
-  const addQuestion = (sectionIndex: number) => {
+  const addQuestion = (sectionIndex: number, type: FormQuestion["type"]) => {
     const newQuestion: FormQuestion = {
       id: Date.now().toString(),
-      type: "text",
+      type,
       title: "Untitled Question",
       required: false,
     }
@@ -287,298 +312,285 @@ export function FormBuilder({ initialForm }: FormBuilderProps) {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
-      {/* Form Settings */}
-      <Card className="border-0 shadow-lg rounded-2xl bg-white">
-        <CardHeader className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-t-2xl">
-          <CardTitle className="text-2xl font-bold text-gray-900">Form Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="p-6 space-y-6">
-          <div>
-            <div className="flex items-center justify-between">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex gap-6">
+      <div className="flex-1 space-y-8">
+        {/* Form Settings */}
+        <Card className="border-0 shadow-lg rounded-2xl bg-white">
+          <CardHeader className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-t-2xl">
+            <CardTitle className="text-2xl font-bold text-gray-900">Form Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-6">
+            <div className="relative">
               <Label htmlFor="form-title" className="text-sm font-medium text-gray-700">Form Title</Label>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="form-title-katex"
-                  checked={katexToggles.formTitle}
-                  onCheckedChange={(checked) =>
-                    setKatexToggles((prev) => ({ ...prev, formTitle: checked }))
-                  }
-                  className="data-[state=checked]:bg-purple-600"
+              <Input
+                id="form-title"
+                value={form.title}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, title: e.target.value }))
+                  renderMath(e.target.value, "form-title-preview")
+                }}
+                onSelect={(e) => handleInputSelection(e, "form-title")}
+                className="mt-1 text-lg font-medium border-2 border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
+                placeholder="Enter form title"
+              />
+              {selectedInput?.id === "form-title" && (
+                <TextFormattingPopup
+                  onFormat={(type) => {
+                    const newTitle = applyFormatting("form-title", type, form.title)
+                    setForm((prev) => ({ ...prev, title: newTitle }))
+                    renderMath(newTitle, "form-title-preview")
+                  }}
                 />
-                <Label htmlFor="form-title-katex" className="text-sm text-gray-600">Math Mode</Label>
-              </div>
-            </div>
-            <Input
-              id="form-title"
-              value={form.title}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, title: e.target.value }))
-                renderMath(e.target.value, "form-title-preview", katexToggles.formTitle)
-              }}
-              className="mt-1 text-lg font-medium border-2 border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
-              placeholder={katexToggles.formTitle ? "Enter title (e.g., Solve 3^2)" : "Enter form title"}
-            />
-            {katexToggles.formTitle && (
+              )}
               <div
                 ref={(el) => {
                   if (el) mathPreviews.current.set("form-title-preview", el)
                 }}
                 className="mt-2 p-2 bg-gray-50 rounded-lg text-sm min-h-[1.5em]"
               />
-            )}
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="form-description" className="text-sm font-medium text-gray-700">Form Description</Label>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="form-description-katex"
-                  checked={katexToggles.formDescription}
-                  onCheckedChange={(checked) =>
-                    setKatexToggles((prev) => ({ ...prev, formDescription: checked }))
-                  }
-                  className="data-[state=checked]:bg-purple-600"
-                />
-                <Label htmlFor="form-description-katex" className="text-sm text-gray-600">Math Mode</Label>
-              </div>
             </div>
-            <Textarea
-              id="form-description"
-              value={form.description}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, description: e.target.value }))
-                renderMath(e.target.value, "form-description-preview", katexToggles.formDescription)
-              }}
-              className="mt-1 border-2 border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
-              rows={4}
-              placeholder={katexToggles.formDescription ? "Enter description (e.g., \\frac{1}{2})" : "Enter form description"}
-            />
-            {katexToggles.formDescription && (
+
+            <div className="relative">
+              <Label htmlFor="form-description" className="text-sm font-medium text-gray-700">Form Description</Label>
+              <Textarea
+                id="form-description"
+                value={form.description}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, description: e.target.value }))
+                  renderMath(e.target.value, "form-description-preview")
+                }}
+                onSelect={(e) => handleInputSelection(e, "form-description")}
+                className="mt-1 border-2 border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
+                rows={4}
+                placeholder="Enter form description"
+              />
+              {selectedInput?.id === "form-description" && (
+                <TextFormattingPopup
+                  onFormat={(type) => {
+                    const newDesc = applyFormatting("form-description", type, form.description)
+                    setForm((prev) => ({ ...prev, description: newDesc }))
+                    renderMath(newDesc, "form-description-preview")
+                  }}
+                />
+              )}
               <div
                 ref={(el) => {
                   if (el) mathPreviews.current.set("form-description-preview", el)
                 }}
                 className="mt-2 p-2 bg-gray-50 rounded-lg text-sm min-h-[1.5em]"
               />
-            )}
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-6">
-            <div className="flex items-center gap-3">
-              <Switch
-                id="is-test"
-                checked={form.isTest}
-                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isTest: checked }))}
-                className="data-[state=checked]:bg-purple-600"
-              />
-              <Label htmlFor="is-test" className="text-sm font-medium text-gray-700">MCQ Test Mode</Label>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Switch
-                id="is-published"
-                checked={form.isPublished}
-                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isPublished: checked }))}
-                className="data-[state=checked]:bg-purple-600"
-              />
-              <Label htmlFor="is-published" className="text-sm font-medium text-gray-700">Published</Label>
+            <div className="flex flex-col sm:flex-row gap-6">
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="is-test"
+                  checked={form.isTest}
+                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isTest: checked }))}
+                  className="data-[state=checked]:bg-purple-600"
+                />
+                <Label htmlFor="is-test" className="text-sm font-medium text-gray-700">MCQ Test Mode</Label>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="is-published"
+                  checked={form.isPublished}
+                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isPublished: checked }))}
+                  className="data-[state=checked]:bg-purple-600"
+                />
+                <Label htmlFor="is-published" className="text-sm font-medium text-gray-700">Published</Label>
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Button
-              onClick={importFromJSON}
-              variant="outline"
-              className="flex-1 min-w-[120px] border-2 border-gray-300 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 rounded-full py-2 transition-all duration-200"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Import JSON
-            </Button>
-
-            <Button
-              onClick={saveForm}
-              disabled={saving}
-              className="flex-1 min-w-[120px] bg-purple-600 hover:bg-purple-700 text-white rounded-full py-2 transition-all duration-200"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              {saving ? "Saving..." : "Save Form"}
-            </Button>
-
-            {initialForm?.id && (
+            <div className="flex flex-wrap gap-3">
               <Button
-                onClick={previewForm}
-                variant="outline"
-                className="flex-1 min-w-[120px] border-2 border-gray-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 rounded-full py-2 transition-all duration-200"
-              >
-                <Eye className="h-4 w-4 mr-2" />
-                Preview
-              </Button>
-            )}
-
-            {initialForm?.id && form.isPublished && (
-              <Button
-                onClick={() => {
-                  const link = `${window.location.origin}/form/${initialForm.id}`
-                  navigator.clipboard.writeText(link)
-                  toast({
-                    title: "Link copied! 📋",
-                    description: "Form link has been copied to clipboard",
-                  })
-                }}
+                onClick={importFromJSON}
                 variant="outline"
                 className="flex-1 min-w-[120px] border-2 border-gray-300 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 rounded-full py-2 transition-all duration-200"
               >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Link
+                <Upload className="h-4 w-4 mr-2" />
+                Import JSON
               </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Sections and Questions */}
-      <div className="space-y-6">
-        {form.sections.map((section, sectionIndex) => (
-          <Card key={section.id} className="border-0 shadow-lg rounded-2xl bg-white">
-            <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-2xl flex flex-row items-center justify-between">
-              <div className="space-y-2 flex-1">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor={`section-title-${sectionIndex}`} className="text-sm font-medium text-gray-700">
-                    Section Title
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id={`section-title-katex-${sectionIndex}`}
-                      checked={katexToggles.sections[sectionIndex]?.title || false}
-                      onCheckedChange={(checked) =>
-                        setKatexToggles((prev) => ({
-                          ...prev,
-                          sections: prev.sections.map((s, i) =>
-                            i === sectionIndex ? { ...s, title: checked } : s
-                          ),
-                        }))
-                      }
-                      className="data-[state=checked]:bg-purple-600"
-                    />
-                    <Label htmlFor={`section-title-katex-${sectionIndex}`} className="text-sm text-gray-600">
-                      Math Mode
-                    </Label>
-                  </div>
-                </div>
-                <Input
-                  id={`section-title-${sectionIndex}`}
-                  value={section.title}
-                  onChange={(e) => {
-                    updateSection(sectionIndex, { title: e.target.value })
-                    renderMath(
-                      e.target.value,
-                      `section-title-${sectionIndex}`,
-                      katexToggles.sections[sectionIndex]?.title || false
-                    )
-                  }}
-                  className="text-lg font-semibold border-2 border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
-                  placeholder={katexToggles.sections[sectionIndex]?.title ? "Enter title (e.g., Solve x^2)" : "Section Title"}
-                />
-                {katexToggles.sections[sectionIndex]?.title && (
-                  <div
-                    ref={(el) => {
-                      if (el) mathPreviews.current.set(`section-title-${sectionIndex}`, el)
-                    }}
-                    className="mt-2 p-2 bg-gray-50 rounded-lg text-sm min-h-[1.5em]"
-                  />
-                )}
-                <div className="flex items-center justify-between">
-                  <Label htmlFor={`section-description-${sectionIndex}`} className="text-sm font-medium text-gray-700">
-                    Section Description
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id={`section-description-katex-${sectionIndex}`}
-                      checked={katexToggles.sections[sectionIndex]?.description || false}
-                      onCheckedChange={(checked) =>
-                        setKatexToggles((prev) => ({
-                          ...prev,
-                          sections: prev.sections.map((s, i) =>
-                            i === sectionIndex ? { ...s, description: checked } : s
-                          ),
-                        }))
-                      }
-                      className="data-[state=checked]:bg-purple-600"
-                    />
-                    <Label htmlFor={`section-description-katex-${sectionIndex}`} className="text-sm text-gray-600">
-                      Math Mode
-                    </Label>
-                  </div>
-                </div>
-                <Textarea
-                  id={`section-description-${sectionIndex}`}
-                  value={section.description}
-                  onChange={(e) => {
-                    updateSection(sectionIndex, { description: e.target.value })
-                    renderMath(
-                      e.target.value,
-                      `section-description-${sectionIndex}`,
-                      katexToggles.sections[sectionIndex]?.description || false
-                    )
-                  }}
-                  className="border-2 border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
-                  rows={2}
-                  placeholder={katexToggles.sections[sectionIndex]?.description ? "Enter description (e.g., \\frac{1}{2})" : "Section Description (optional)"}
-                />
-                {katexToggles.sections[sectionIndex]?.description && (
-                  <div
-                    ref={(el) => {
-                      if (el) mathPreviews.current.set(`section-description-${sectionIndex}`, el)
-                    }}
-                    className="mt-2 p-2 bg-gray-50 rounded-lg text-sm min-h-[1.5em]"
-                  />
-                )}
-              </div>
-              {form.sections.length > 1 && (
+              <Button
+                onClick={saveForm}
+                disabled={saving}
+                className="flex-1 min-w-[120px] bg-purple-600 hover:bg-purple-700 text-white rounded-full py-2 transition-all duration-200"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saving ? "Saving..." : "Save Form"}
+              </Button>
+
+              {initialForm?.id && (
                 <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => deleteSection(sectionIndex)}
-                  className="ml-4 rounded-full"
+                  onClick={previewForm}
+                  variant="outline"
+                  className="flex-1 min-w-[120px] border-2 border-gray-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 rounded-full py-2 transition-all duration-200"
                 >
-                  Delete Section
+                  <Eye className="h-4 w-4 mr-2" />
+                  Preview
                 </Button>
               )}
-            </CardHeader>
-            <CardContent className="p-6 space-y-4">
-              {section.questions.map((question, questionIndex) => (
-                <QuestionEditor
-                  key={question.id}
-                  question={question}
-                  onUpdate={(updatedQuestion) =>
-                    updateQuestion(sectionIndex, questionIndex, updatedQuestion)
-                  }
-                  onDelete={() => deleteQuestion(sectionIndex, questionIndex)}
-                  isTest={form.isTest}
-                  renderMath={renderMath}
-                />
-              ))}
+
+              {initialForm?.id && form.isPublished && (
+                <Button
+                  onClick={() => {
+                    const link = `${window.location.origin}/form/${initialForm.id}`
+                    navigator.clipboard.writeText(link)
+                    toast({
+                      title: "Link copied! 📋",
+                      description: "Form link has been copied to clipboard",
+                    })
+                  }}
+                  variant="outline"
+                  className="flex-1 min-w-[120px] border-2 border-gray-300 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 rounded-full py-2 transition-all duration-200"
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Link
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sections and Questions */}
+        <div className="space-y-6">
+          {form.sections.map((section, sectionIndex) => (
+            <Card key={section.id} className="border-0 shadow-lg rounded-2xl bg-white">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-t-2xl flex flex-row items-center justify-between">
+                <div className="space-y-2 flex-1">
+                  <div className="relative">
+                    <Label htmlFor={`section-title-${sectionIndex}`} className="text-sm font-medium text-gray-700">
+                      Section Title
+                    </Label>
+                    <Input
+                      id={`section-title-${sectionIndex}`}
+                      value={section.title}
+                      onChange={(e) => {
+                        updateSection(sectionIndex, { title: e.target.value })
+                        renderMath(e.target.value, `section-title-${sectionIndex}`)
+                      }}
+                      onSelect={(e) => handleInputSelection(e, `section-title-${sectionIndex}`)}
+                      className="mt-1 text-lg font-semibold border-2 border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
+                      placeholder="Section Title"
+                    />
+                    {selectedInput?.id === `section-title-${sectionIndex}` && (
+                      <TextFormattingPopup
+                        onFormat={(type) => {
+                          const newTitle = applyFormatting(`section-title-${sectionIndex}`, type, section.title)
+                          updateSection(sectionIndex, { title: newTitle })
+                          renderMath(newTitle, `section-title-${sectionIndex}`)
+                        }}
+                      />
+                    )}
+                    <div
+                      ref={(el) => {
+                        if (el) mathPreviews.current.set(`section-title-${sectionIndex}`, el)
+                      }}
+                      className="mt-2 p-2 bg-gray-50 rounded-lg text-sm min-h-[1.5em]"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Label htmlFor={`section-description-${sectionIndex}`} className="text-sm font-medium text-gray-700">
+                      Section Description
+                    </Label>
+                    <Textarea
+                      id={`section-description-${sectionIndex}`}
+                      value={section.description}
+                      onChange={(e) => {
+                        updateSection(sectionIndex, { description: e.target.value })
+                        renderMath(e.target.value, `section-description-${sectionIndex}`)
+                      }}
+                      onSelect={(e) => handleInputSelection(e, `section-description-${sectionIndex}`)}
+                      className="mt-1 border-2 border-gray-300 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
+                      rows={2}
+                      placeholder="Section Description (optional)"
+                    />
+                    {selectedInput?.id === `section-description-${sectionIndex}` && (
+                      <TextFormattingPopup
+                        onFormat={(type) => {
+                          const newDesc = applyFormatting(`section-description-${sectionIndex}`, type, section.description || "")
+                          updateSection(sectionIndex, { description: newDesc })
+                          renderMath(newDesc, `section-description-${sectionIndex}`)
+                        }}
+                      />
+                    )}
+                    <div
+                      ref={(el) => {
+                        if (el) mathPreviews.current.set(`section-description-${sectionIndex}`, el)
+                      }}
+                      className="mt-2 p-2 bg-gray-50 rounded-lg text-sm min-h-[1.5em]"
+                    />
+                  </div>
+                </div>
+                {form.sections.length > 1 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => deleteSection(sectionIndex)}
+                    className="ml-4 rounded-full"
+                  >
+                    Delete Section
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                {section.questions.map((question, questionIndex) => (
+                  <QuestionEditor
+                    key={question.id}
+                    question={question}
+                    onUpdate={(updatedQuestion) =>
+                      updateQuestion(sectionIndex, questionIndex, updatedQuestion)
+                    }
+                    onDelete={() => deleteQuestion(sectionIndex, questionIndex)}
+                    isTest={form.isTest}
+                    onSelectInput={handleInputSelection}
+                    selectedInput={selectedInput}
+                    renderMath={renderMath}
+                    applyFormatting={applyFormatting}
+                  />
+                ))}
+                <Button
+                  onClick={() => addQuestion(sectionIndex, "text")}
+                  variant="outline"
+                  className="w-full border-2 border-gray-300 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 rounded-full py-2 transition-all duration-200"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Question
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+          <Button
+            onClick={addSection}
+            variant="outline"
+            className="w-full border-2 border-gray-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 rounded-full py-2 transition-all duration-200"
+          >
+            <Layout className="h-4 w-4 mr-2" />
+            Add Section
+          </Button>
+        </div>
+      </div>
+
+      {/* Question Type Toolbar */}
+      <div className="w-16 sticky top-20 self-start">
+        <Card className="border-0 shadow-lg rounded-2xl bg-white">
+          <CardContent className="p-2 space-y-2">
+            {questionTypes.map(({ type, label, icon: Icon }) => (
               <Button
-                onClick={() => addQuestion(sectionIndex)}
-                variant="outline"
-                className="w-full border-2 border-gray-300 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 rounded-full py-2 transition-all duration-200"
+                key={type}
+                variant="ghost"
+                size="icon"
+                title={label}
+                onClick={() => addQuestion(form.sections.length - 1, type)}
+                className="w-12 h-12 rounded-full hover:bg-purple-50 hover:text-purple-700"
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Question
+                <Icon className="h-5 w-5" />
               </Button>
-            </CardContent>
-          </Card>
-        ))}
-        <Button
-          onClick={addSection}
-          variant="outline"
-          className="w-full border-2 border-gray-300 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 rounded-full py-2 transition-all duration-200"
-        >
-          <Layout className="h-4 w-4 mr-2" />
-          Add Section
-        </Button>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
