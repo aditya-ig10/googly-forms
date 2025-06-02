@@ -8,17 +8,25 @@ export interface FormQuestion {
   correctAnswer?: string | string[] // For MCQ tests
 }
 
+export interface FormSection {
+  id: string
+  title: string
+  description?: string
+  questions: FormQuestion[]
+}
+
 export interface Form {
   id: string
   title: string
   description: string
-  questions: FormQuestion[]
+  sections: FormSection[]
+  questions: FormQuestion[] // For backward compatibility
   isPublished: boolean
   isTest: boolean // For MCQ tests
   createdAt: Date
   updatedAt: Date
-  userId: string // Add user ID
-  userEmail: string // Add user email
+  userId: string
+  userEmail: string
 }
 
 export interface FormResponse {
